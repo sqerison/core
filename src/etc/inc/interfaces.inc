@@ -2605,54 +2605,7 @@ function interface_track6_slaac_configure($interface = 'lan', $lancfg)
 
 function interface_track6_6rd_configure($interface = 'lan', $lancfg)
 {
-    global $config;
-
-    $wancfg = $config['interfaces'][$lancfg['track6-interface']];
-    if (empty($wancfg)) {
-        log_error("Interface {$interface} tracking non-existent interface {$lancfg['track6-interface']}");
-        return;
-    }
-
-    $ip4address = get_interface_ip($lancfg['track6-interface']);
-    if (!is_ipaddrv4($ip4address)) {
-        log_error("The interface IPv4 address '{$ip4address}' on interface '{$lancfg['track6-interface']}' is invalid, not configuring 6RD tracking");
-        return;
-    }
-    $hexwanv4 = return_hex_ipv4($ip4address);
-
-    /* create the long prefix notation for math, save the prefix length */
-    $rd6prefix = explode("/", $wancfg['prefix-6rd']);
-    $rd6prefixlen = $rd6prefix[1];
-    $rd6prefix = Net_IPv6::uncompress($rd6prefix[0]);
-
-    /* binary presentation of the prefix for all 128 bits. */
-    $rd6lanbin = convert_ipv6_to_128bit($rd6prefix);
-
-    /* just save the left prefix length bits */
-    $rd6lanbin = substr($rd6lanbin, 0, $rd6prefixlen);
-    /* add the v4 address, offset n bits from the left */
-    $rd6lanbin .= substr(sprintf("%032b", hexdec($hexwanv4)), (0 + $wancfg['prefix-6rd-v4plen']), 32);
-
-    /* add the custom prefix id, max 32bits long? (64 bits - (prefixlen + (32 - v4plen)) */
-    /* 64 - (37 + (32 - 17)) = 8 == /52 */
-    $restbits = 64 - ($rd6prefixlen + (32 - $wancfg['prefix-6rd-v4plen']));
-    // echo "64 - (prefixlen {$rd6prefixlen} + v4len (32 - {$wancfg['prefix-6rd-v4plen']})) = {$restbits} \n";
-    $rd6lanbin .= substr(sprintf("%032b", str_pad($lancfg['track6-prefix-id'], 32, "0", STR_PAD_LEFT)), (32 - $restbits), 32);
-    /* fill the rest out with zeros */
-    $rd6lanbin = str_pad($rd6lanbin, 128, "0", STR_PAD_RIGHT);
-
-    /* convert the 128 bits for the lan address back into a valid IPv6 address */
-    $rd6lan = convert_128bit_to_ipv6($rd6lanbin) . (1 + get_interface_number_track6($lancfg['track6-interface'], $interface));
-
-    $lanif = get_real_interface($interface, 'inet6');
-    $oip = find_interface_ipv6($lanif);
-    if (is_ipaddrv6($oip)) {
-        mwexec("/sbin/ifconfig {$lanif} inet6 {$oip} delete");
-    }
-
-    log_error("rd6 {$interface} with ipv6 address {$rd6lan} based on {$lancfg['track6-interface']} ipv4 {$ip4address}");
-    /* XXX why 64? */
-    mwexec("/sbin/ifconfig {$lanif} inet6 {$rd6lan} prefixlen 64");
+    interface_track6_slaac_configure($interface, $lancfg);
 }
 
 function interface_track6_6to4_configure($interface = 'lan', $lancfg)
@@ -2691,7 +2644,6 @@ function interface_track6_6to4_configure($interface = 'lan', $lancfg)
     }
 
     log_error("sixto4 {$interface} with ipv6 address {$sixto4lan} based on {$lancfg['track6-interface']} ipv4 {$ip4address}");
-    /* XXX why 64? */
     mwexec("/sbin/ifconfig {$lanif} inet6 {$sixto4lan} prefixlen 64");
 }
 
@@ -3810,7 +3762,7 @@ function link_interface_to_track6($wanif, $update = false)
     }
 
     if ($update) {
-        if ($wancfg['ipaddrv6'] == 'slaac') {
+        if ($wancfg['ipaddrv6'] == 'slaac' || $wancfg['ipaddrv6'] == '6rd') {
             services_radvd_configure();
         }
 

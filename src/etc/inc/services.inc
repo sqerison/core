@@ -330,6 +330,9 @@ function services_radvd_configure($blacklist = array())
         if ($autotype == 'slaac') {
             /* XXX this may be incorrect and needs an override or revisit */
             $subnetv6 = '2000::';
+        } elseif ($autotype == '6rd') {
+            $rd6prefix = explode('/', $config['interfaces'][$trackif]['prefix-6rd']);
+            $subnetv6 = $rd6prefix[0];
         } elseif (is_ipaddrv6($ifcfgipv6)) {
             $ifcfgsnv6 = get_interface_subnetv6($if);
             $subnetv6 = gen_subnetv6($ifcfgipv6, $ifcfgsnv6);
@@ -353,10 +356,14 @@ function services_radvd_configure($blacklist = array())
         $radvdconf .= sprintf("\tAdvLinkMTU %s;\n", !empty($mtu) ? $mtu : 1280);
         $radvdconf .= "\tAdvOtherConfigFlag on;\n";
         $radvdconf .= "\tprefix {$subnetv6}/{$ifcfgsnv6} {\n";
-        if ($autotype == 'slaac') {
-            /* XXX also of interest in the future, see hardcoded prefix above */
-            $radvdconf .= "\t\tBase6Interface $realtrackif;\n";
-            $radvdconf .= "\t\tDeprecatePrefix on;\n";
+        switch ($autotype) {
+            case 'slaac':
+            case '6rd':
+                $radvdconf .= "\t\tBase6Interface $realtrackif;\n";
+                $radvdconf .= "\t\tDeprecatePrefix on;\n";
+                break;
+            default:
+                break;
         }
         $radvdconf .= "\t\tAdvOnLink on;\n";
         $radvdconf .= "\t\tAdvAutonomous on;\n";
